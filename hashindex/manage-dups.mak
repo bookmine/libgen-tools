@@ -16,7 +16,7 @@ md5deep.txt.dup-hashes: md5deep.txt.big
 	uniq -c -w44 $^ | awk '$$1 > 1 { print $$3 }' >$@
 
 md5deep.txt.dup: md5deep.txt.dup-hashes md5deep.txt.big
-	grep -F -f $^ >$@
+	if [ -s md5deep.txt.dup-hashes ]; then grep -F -f $^ >$@; else >$@; fi
 
 md5deep.txt.dup.size-fname: md5deep.txt.dup
 	python $(SCRIPTS)/process-dups.py --format $^ >$@
