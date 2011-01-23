@@ -1,0 +1,50 @@
+A walkthru on how to use manage-dups and process-dups:
+
+1. $LIB is an absolute or relative path to the collection.
+
+2. Run:
+
+    make -f manage-dups.mak LIB=$LIB
+
+This will create md5deep.txt.dup.size-fname with content like:
+
+    #
+    234987 foo/1.pdf
+    234987 bar/baz/somefile.pdf
+    #
+    8989989 path/muchbetterfile.pdf
+    8989989 bar/baz/2.pdf
+    #
+
+3. Look at md5deep.txt.dup.size-fname, for each group consider which file's
+name/location is better. Mark all the rest files in groups (there may be more
+than 2 files of course) with '*' at the beginning of line. So, for example
+above we'll get:
+
+    #
+    *234987 foo/1.pdf
+    234987 bar/baz/somefile.pdf
+    #
+    8989989 path/muchbetterfile.pdf
+    *8989989 bar/baz/2.pdf
+    #
+
+4. Run
+
+    python process-dups.py --show md5deep.txt.dup.size-fname
+
+And make sure that list of files for deletion is indeed correct.
+
+5. Run
+
+    python process-dups.py --delete md5deep.txt.dup.size-fname
+
+to actually perform deletions.
+
+6. Run
+
+    make -f manage-dups.mak LIB=$LIB -B
+
+(note -B) to re-create md5deep.txt.dup.size-fname .
+
+7. If there're still dups, repeat from step 3.
