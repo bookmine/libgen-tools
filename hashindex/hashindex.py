@@ -154,7 +154,7 @@ def main():
         oparser.error("Not enough arguments")
 
 
-    if options.create:
+    if options.create or options.update and not os.path.exists(args[0]):
         out_fp = open(args[0], "w")
         index_directory(args[1], on_miss=output_new_entry, params={"fp": out_fp})
         out_fp.close()
