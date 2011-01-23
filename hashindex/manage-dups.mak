@@ -20,3 +20,16 @@ md5deep.txt.dup: md5deep.txt.dup-hashes md5deep.txt.big
 
 md5deep.txt.dup.size-fname: md5deep.txt.dup
 	python $(SCRIPTS)/process-dups.py --format $^ >$@
+
+
+# Diff index and lib dir
+diff: md5deep.txt
+	python "$(SCRIPTS)/hashindex.py" $^ --changes $(LIB)
+
+# Delete what's marked in md5deep.txt.dup.size-fname
+delete: md5deep.txt.dup.size-fname
+	python $(SCRIPTS)/process-dups.py --delete $^
+
+# Show what would be deleted with delete target
+show-delete: md5deep.txt.dup.size-fname
+	python $(SCRIPTS)/process-dups.py --show $^
