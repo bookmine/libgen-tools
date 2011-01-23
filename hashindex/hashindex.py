@@ -85,43 +85,48 @@ def index_directory(path, index=None, params={}, on_match=None, on_miss=None):
                     continue
             on_miss and on_miss(fullname, params)
 
-oparser = optparse.OptionParser(usage="%prog <command> <index file>")
-oparser.add_option('-c', '--create', action="store_true", help="Create index")
-oparser.add_option('', '--changes', action="store_true", help="Show changes between index and directory")
-oparser.add_option('-u', "--update", action="store_true", help="Update index")
 
-(options, args) = oparser.parse_args()
-if len(args) < 2:
-    oparser.error("Not enough arguments")
+def main():
+    oparser = optparse.OptionParser(usage="%prog <command> <index file>")
+    oparser.add_option('-c', '--create', action="store_true", help="Create index")
+    oparser.add_option('', '--changes', action="store_true", help="Show changes between index and directory")
+    oparser.add_option('-u', "--update", action="store_true", help="Update index")
+
+    (options, args) = oparser.parse_args()
+    if len(args) < 2:
+        oparser.error("Not enough arguments")
 
 
-if options.create:
-    out_fp = open(args[0], "w")
-    index_directory(args[1], on_miss=output_new_entry, params={"fp": out_fp})
-    out_fp.close()
-elif options.changes:
-    index = HashIndex(args[0])
-    index.load(HashIndex.INDEX_FILENAME)
-    # Output only files not existing in index
-    params = {"fp": sys.stdout, "prefix": "+"}
-    index_directory(args[1], index, on_miss=output_new_entry, params=params)
-    # Now unmarked files in index - deleted from dir
-    dir = args[1]
-    # Make sure we compare complete path components and don't match "/foo" with "/foobar"
-    if dir[-1] != '/':
-        dir += '/'
-    for e in index.unmarked():
-        if e[2].startswith(dir):
-            params["prefix"] = "-"
-            output_existing_entry(e, params=params)
-elif options.update:
-    index = HashIndex(args[0])
-    index.load(HashIndex.INDEX_FILENAME)
-    out_fp = open(args[0] + ".tmp", "w")
-    # Just calc hash and dump for new files, and re-dump existing entries
-    # Old entries are automagically gone
-    index_directory(args[1], index, on_miss=output_new_entry, on_match=output_existing_entry, params={"fp": out_fp})
-    out_fp.close()
-    os.rename(args[0] + ".tmp", args[0])
-else:
-    oparser.error("No command")
+    if options.create:
+        out_fp = open(args[0], "w")
+        index_directory(args[1], on_miss=output_new_entry, params={"fp": out_fp})
+        out_fp.close()
+    elif options.changes:
+        index = HashIndex(args[0])
+        index.load(HashIndex.INDEX_FILENAME)
+        # Output only files not existing in index
+        params = {"fp": sys.stdout, "prefix": "+"}
+        index_directory(args[1], index, on_miss=output_new_entry, params=params)
+        # Now unmarked files in index - deleted from dir
+        dir = args[1]
+        # Make sure we compare complete path components and don't match "/foo" with "/foobar"
+        if dir[-1] != '/':
+            dir += '/'
+        for e in index.unmarked():
+            if e[2].startswith(dir):
+                params["prefix"] = "-"
+                output_existing_entry(e, params=params)
+    elif options.update:
+        index = HashIndex(args[0])
+        index.load(HashIndex.INDEX_FILENAME)
+        out_fp = open(args[0] + ".tmp", "w")
+        # Just calc hash and dump for new files, and re-dump existing entries
+        # Old entries are automagically gone
+        index_directory(args[1], index, on_miss=output_new_entry, on_match=output_existing_entry, params={"fp": out_fp})
+        out_fp.close()
+        os.rename(args[0] + ".tmp", args[0])
+    else:
+        oparser.error("No command")
+
+if __name__ == "__main__":
+    main()
