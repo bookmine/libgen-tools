@@ -1,10 +1,69 @@
 import sys
 import os
+import re
 import hashlib
 import stat
 import optparse
 
 BLOCK_SIZE = 64*1024
+
+
+class HashIndexParser(object):
+    "Class to parse various formats of hash index records, with auto-detection."
+
+    FORMATS = [
+        ("size-hash-mtime", r" *(?P<size>\d+)  (?P<hash>[0-9A-Fa-f]{32})  (?P<mtime>[12]\d{3}[01]\d[0-3]\dT[02]\d{5})  (?P<filename>.+)"),
+        ("size-hash", r" *(?P<size>\d+)  (?P<hash>[0-9A-Fa-f]{32})  (?P<filename>.+)"),
+        ("hash", r"(?P<hash>[0-9A-Fa-f]{32})  (?P<filename>.+)"),
+    ]
+
+    def __init__(self):
+        self.format_name = None
+        self.format_regexp = None
+
+    def detect_format(self, l):
+        for name, regexp in self.FORMATS:
+            if re.match(regexp, l):
+                self.format_name = name
+                self.format_regexp = regexp
+                return
+        self.parse_error(l)
+
+    def parse(self, l):
+        if not self.format_regexp:
+            self.detect_format(l)
+        m = re.match(self.format_regexp, l)
+        if not m:
+            self.parse_error(l)
+        entry = m.groupdict()
+        # Some fields are implicitly integers
+        if "size" in entry:
+            entry["size"] = int(entry["size"])
+        return entry
+
+    def parse_error(self, line):
+        raise NotImplementedError('Format of hash index entry not recognized: "' + line + '"')
+
+
+class HashIndexReader(object):
+    "Reads hash entries from file object using iterator protocol."
+
+    def __init__(self, fp, hash_index_parser=None):
+        self.fp = fp
+        # Prefer injection over inheritance
+        if hash_index_parser is None:
+            self.parser = HashIndexParser()
+        else:
+            self.parser = hash_index_parser
+
+    def __iter__(self):
+        return self
+
+    def next(self):
+        l = self.fp.next()
+        if l[-1] == '\n':
+            l = l[:-1]
+        return self.parser.parse(l)
 
 
 class HashIndex(object):
@@ -22,30 +81,27 @@ class HashIndex(object):
         self.i_by_filename = {}
 
     def load(self, index):
-        fp = open(self.index_fname)
-        for l in fp:
-            l = l.strip()
-            size, hash, filename = l.split(None, 2)
-            size = int(size)
-            entry = [size, hash, filename, False]
+        fp = HashIndexReader(open(self.index_fname))
+        for e in fp:
+            e["mark"] = False
             if index & self.INDEX_SIZE:
-                self.i_by_size[size] = entry
+                self.i_by_size[e["size"]] = e
             if index & self.INDEX_HASH:
-                self.i_by_hash[hash] = entry
+                self.i_by_hash[e["hash"]] = e
             if index & self.INDEX_SIZE_HASH:
-                self.i_by_size_hash[(size, hash)] = entry
+                self.i_by_size_hash[(e["size"], e["hash"])] = e
             if index & self.INDEX_FILENAME:
-                self.i_by_filename[filename] = entry
+                self.i_by_filename[e["filename"]] = e
 
     def by_filename(self, filename):
         return self.i_by_filename.get(filename)
 
     def mark(self, filename):
-        self.i_by_filename[filename][3] = True
+        self.i_by_filename[filename]["mark"] = True
 
     def unmarked(self):
         for entry in self.i_by_filename.itervalues():
-            if not entry[3]:
+            if not entry["mark"]:
                 yield entry
 
 def hash_file(fname):
@@ -59,15 +115,16 @@ def hash_file(fname):
     fp.close()
     return hasher.hexdigest()
 
-def format_index_entry(size, hash, fullname):
-    return "%10d  %s  %s\n" % (size, hash, fullname)
+def format_index_entry(e):
+    return "%10d  %s  %s\n" % (e["size"], e["hash"], e["filename"])
 
 def output_existing_entry(entry, params):
-    params["fp"].write(params.get("prefix", "") + format_index_entry(*entry[0:3]))
+    params["fp"].write(params.get("prefix", "") + format_index_entry(entry))
 
 def output_new_entry(fullname, params):
     st = os.stat(fullname)
-    params["fp"].write(params.get("prefix", "") + format_index_entry(st[stat.ST_SIZE], hash_file(fullname), fullname))
+    e = {"size": st[stat.ST_SIZE], "hash": hash_file(fullname), "filename": fullname}
+    params["fp"].write(params.get("prefix", "") + format_index_entry(e))
 
 def index_directory(path, index=None, params={}, on_match=None, on_miss=None):
     """Recursively scan directory. For each file found, if index given, look
@@ -113,7 +170,7 @@ def main():
         if dir[-1] != '/':
             dir += '/'
         for e in index.unmarked():
-            if e[2].startswith(dir):
+            if e["filename"].startswith(dir):
                 params["prefix"] = "-"
                 output_existing_entry(e, params=params)
     elif options.update:
