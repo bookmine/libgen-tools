@@ -146,7 +146,7 @@ def index_directory(path, index=None, params={}, on_match=None, on_miss=None):
 def main():
     oparser = optparse.OptionParser(usage="%prog <command> <index file>")
     oparser.add_option('-c', '--create', action="store_true", help="Create index")
-    oparser.add_option('', '--changes', action="store_true", help="Show changes between index and directory")
+    oparser.add_option('', '--diff', action="store_true", help="Show changes between index and directory")
     oparser.add_option('-u', "--update", action="store_true", help="Update index")
 
     (options, args) = oparser.parse_args()
@@ -158,7 +158,7 @@ def main():
         out_fp = open(args[0], "w")
         index_directory(args[1], on_miss=output_new_entry, params={"fp": out_fp})
         out_fp.close()
-    elif options.changes:
+    elif options.diff:
         index = HashIndex(args[0])
         index.load(HashIndex.INDEX_FILENAME)
         # Output only files not existing in index
