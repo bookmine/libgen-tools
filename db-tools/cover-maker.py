@@ -11,9 +11,6 @@ import MySQLdb
 import MySQLdb.cursors
 
 
-LIB_ROOT = '/media/freeagent/ebook/lib-libgen'
-
-
 #pdftoppm -f 1 -l 1 -scale-to 150 -jpeg Математика\ 2006-11.pdf .
 
 #ddjvu -format=ppm -page=1 -size=150x150 Силин_А.В.\,_Шмакова_Н.А.-Открываем_неевклидову_геометрию\(1988\).djvu a.ppm
@@ -40,6 +37,7 @@ def get_ext(fname, default_ext=None):
     return default_ext
 
 def download_cover(cover_url, main_file_name):
+    global lib_root
     cover_ext = get_ext(cover_url)
     if not cover_ext:
         log.warning("%s: cover url has no file extension, using 'img' placeholder", row)
@@ -56,7 +54,7 @@ def download_cover(cover_url, main_file_name):
     cover_fp.close()
     net_fp.close()
     dest_cover_name = main_file_name + "." + cover_ext
-    dest_cover_path = os.path.join(LIB_ROOT, dest_cover_name)
+    dest_cover_path = os.path.join(lib_root, dest_cover_name)
     shutil.move("cover.tmp", dest_cover_path)
     log.info("Downloaded cover to %s", dest_cover_path)
     return dest_cover_name
@@ -64,26 +62,31 @@ def download_cover(cover_url, main_file_name):
 # Global vars
 log = None
 options = None
+lib_root = None
 
 def main():
-    global options, log
-    oparser = optparse.OptionParser(usage="%prog <options>")
+    global options, log, lib_root
+    oparser = optparse.OptionParser(usage="%prog <options>", description="""\
+Make coverpage thumbnails for LibGen library, either by downloading them or
+generating from first page of PDF/DJVU.""")
+
+    oparser.add_option("", "--all", action="store_true", help="Process all records")
+    oparser.add_option("", "--id", metavar="ID[-IDLAST]", help="Process record(s) with given id(s)")
+    oparser.add_option("", "--hash", help="Process only record with given hash")
+    oparser.add_option("-l", "--limit", type="int", default=-1, help="Process at most LIMIT records")
     oparser.add_option("-n", "--dry-run", action="store_true", help="Don't write anything to DB")
     oparser.add_option("-d", "--debug", action="store_true", default=False, help="Show debug logging (e.g. SQL)")
-    oparser.add_option("-l", "--limit", type="int", default=-1, help="Process at most LIMIT records")
-    oparser.add_option("", "--hash", help="Process only record with hash")
-    oparser.add_option("", "--id", metavar="ID[-IDLAST]", help="Process record(s) with given id(s)")
-    oparser.add_option("", "--all", action="store_true", help="Process all records")
 
     (options, args) = oparser.parse_args()
-    if len(args) != 0:
-        oparser.error("Only options are expected")
+    if len(args) != 1:
+        oparser.error("Wrong number of arguments")
     if len(filter(None, [options.all, options.id, options.hash])) != 1:
-        oparser.error("One (and only one) of --all, --id= or --hash= must be given")
+        oparser.error("One (and only one) of --all, --id= or --hash= must be specified")
 
     logging.basicConfig(level=[logging.INFO, logging.DEBUG][options.debug])
     log = logging.getLogger()
 
+    lib_root = args[0]
     if options.all:
         range_where = ""
     elif options.id:
