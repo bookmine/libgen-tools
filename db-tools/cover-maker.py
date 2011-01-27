@@ -1,12 +1,15 @@
 # coding: utf8
 import sys
 import os
-import MySQLdb
-import MySQLdb.cursors
 import urllib2
 import logging
 import shutil
 import optparse
+import re
+
+import MySQLdb
+import MySQLdb.cursors
+
 
 LIB_ROOT = '/media/freeagent/ebook/lib-libgen'
 
@@ -70,17 +73,31 @@ def main():
     oparser.add_option("-l", "--limit", type="int", default=-1, help="Process at most LIMIT records")
     oparser.add_option("", "--hash", help="Process only record with hash")
     oparser.add_option("", "--id", metavar="ID[-IDLAST]", help="Process record(s) with given id(s)")
+    oparser.add_option("", "--all", action="store_true", help="Process all records")
 
     (options, args) = oparser.parse_args()
     if len(args) != 0:
         oparser.error("Only options are expected")
+    if len(filter(None, [options.all, options.id, options.hash])) != 1:
+        oparser.error("One (and only one) of --all, --id= or --hash= must be given")
 
     logging.basicConfig(level=[logging.INFO, logging.DEBUG][options.debug])
     log = logging.getLogger()
 
+    if options.all:
+        range_where = ""
+    elif options.id:
+        m = re.match(r"(\d+)-(\d+)", options.id)
+        if m:
+            range_where = " AND ID BETWEEN %s AND %s" % (m.group(1), m.group(2))
+        else:
+            range_where = " AND ID=%d" % int(options.id)
+    elif options.hash:
+        range_where = " AND MD5='%s'" % options.hash
+
     conn = MySQLdb.connect(host="localhost", user="pfalcon", passwd="", db="bookwarrior", use_unicode=True)
     cursor = conn.cursor(LoggingReadCursor)
-    cursor.execute("SELECT ID, MD5, Filename, Coverurl FROM updated WHERE Coverurl LIKE 'http:%' LIMIT 100")
+    cursor.execute("SELECT ID, MD5, Filename, Coverurl FROM updated WHERE Coverurl LIKE 'http:%'" + range_where)
     cursor_write = conn.cursor(LoggingWriteCursor)
     processed = 0
     while True:
