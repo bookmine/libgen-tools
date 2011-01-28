@@ -78,7 +78,7 @@ lib_root = None
 
 def main():
     global options, log, lib_root
-    oparser = optparse.OptionParser(usage="%prog <options>", description="""\
+    oparser = optparse.OptionParser(usage="%prog <options> <lib path>", description="""\
 Make coverpage thumbnails for LibGen library, either by downloading them or
 generating from first page of PDF/DJVU.""")
 
