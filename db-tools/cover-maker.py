@@ -85,7 +85,7 @@ generating from first page of PDF/DJVU.""")
     oparser.add_option("", "--all", action="store_true", help="Process all records")
     oparser.add_option("", "--id", metavar="ID[-IDLAST]", help="Process record(s) with given id(s)")
     oparser.add_option("", "--hash", help="Process only record with given hash")
-    oparser.add_option("-l", "--limit", type="int", default=-1, help="Process at most LIMIT records")
+    oparser.add_option("-l", "--limit", type="int", default=-1, help="Make at most LIMIT covers")
     oparser.add_option("", "--retry", type="int", default=3, help="Number of retries on network errors")
     oparser.add_option("-n", "--dry-run", action="store_true", help="Don't write anything to DB")
     oparser.add_option("-d", "--debug", action="store_true", default=False, help="Show debug logging (e.g. SQL)")
@@ -115,6 +115,7 @@ generating from first page of PDF/DJVU.""")
     cursor = conn.cursor(LoggingReadCursor)
     cursor.execute("SELECT ID, MD5, Filename, Coverurl FROM updated WHERE Coverurl LIKE 'http:%'" + range_where)
     cursor_write = conn.cursor(LoggingWriteCursor)
+    total = 0
     processed = 0
     while True:
         if options.limit >= 0 and processed >= options.limit:
@@ -122,13 +123,14 @@ generating from first page of PDF/DJVU.""")
         row = cursor.fetchone()
         if not row:
             break
-        print row
+        total += 1
         dest_cover_name = download_cover(row[3], row[2])
         if dest_cover_name:
             cursor_write.execute("UPDATE updated SET Coverurl=%s WHERE ID=%s", (dest_cover_name, row[0]))
             processed += 1
 
-    conn.rollback()
+    print "Total records processed: %d, new covers made: %d" % (total, processed)
+    conn.commit()
     cursor.close()
     conn.close()
 
