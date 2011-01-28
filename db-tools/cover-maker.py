@@ -39,7 +39,8 @@ def download_cover(cover_url, main_file_name):
         log.warning("%s: cover url has no file extension, using 'img' placeholder", row)
         cover_ext = '.img'
 
-    dest_cover_name = main_file_name + cover_ext
+    # -d suffix means "downloaded"
+    dest_cover_name = main_file_name + "-d" + cover_ext
     dest_cover_path = os.path.join(dest_root, dest_cover_name)
     if not options.force and os.path.exists(dest_cover_path):
         log.info("Cover %s already exists, using as is", dest_cover_path)
