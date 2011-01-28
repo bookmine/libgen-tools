@@ -159,14 +159,17 @@ class MyOptionParser(optparse.OptionParser):
 
     def need_args(self, num):
         if len(self.my_args) != num:
-            oparser.error("Wrong number of arguments")
+            self.error("Wrong number of arguments")
 
-def get_ext(fname):
-    if '.' in fname:
-        ext = fname.rsplit('.', 1)[1]
-        if len(ext) < 6:
-            return ext
-    return ''
+def splitext(fname):
+    parts = os.path.splitext(fname)
+    if len(parts[1]) < 6:
+        if parts[1] in (".gz", ".bz2"):
+            parts2 = os.path.splitext(parts[0])
+            if len(parts2[1]) < 6:
+                return (parts2[0], parts2[1] + parts[1])
+        return parts
+    return (fname, '')
 
 def main():
     oparser = MyOptionParser(usage="%prog <command> <index file> [<collection path>]")
@@ -215,7 +218,7 @@ def main():
         print "Files in index:", len(index)
         by_ext = {}
         for e in index.all():
-            ext = get_ext(e["filename"]).lower()
+            ext = splitext(e["filename"])[1]
             by_ext[ext] = by_ext.get(ext, 0) + 1
         print sorted(by_ext.items(), key=lambda p: p[1], reverse=True)
     else:
