@@ -32,17 +32,12 @@ class LoggingWriteCursor(MySQLdb.cursors.Cursor):
             log.debug("Executing SQL: %s; args: %s", sql, values)
             MySQLdb.cursors.Cursor.execute(self, sql, values)
 
-def get_ext(fname, default_ext=None):
-    if '.' in fname:
-        return fname.rsplit('.', 1)[1]
-    return default_ext
-
 def download_cover(cover_url, main_file_name):
     global lib_root
-    cover_ext = get_ext(cover_url)
+    cover_ext = os.path.splitext(cover_url)[1]
     if not cover_ext:
         log.warning("%s: cover url has no file extension, using 'img' placeholder", row)
-        cover_ext = 'img'
+        cover_ext = '.img'
 
     attempt = 0
     while True:
@@ -65,7 +60,7 @@ def download_cover(cover_url, main_file_name):
             attempt += 1
             log.warning("Could not download cover, will retry: %s", e)
             time.sleep(2)
-    dest_cover_name = main_file_name + "." + cover_ext
+    dest_cover_name = main_file_name + cover_ext
     dest_cover_path = os.path.join(lib_root, dest_cover_name)
     shutil.move("cover.tmp", dest_cover_path)
     log.info("Downloaded cover to %s", dest_cover_path)
