@@ -82,19 +82,31 @@ def main():
 Make coverpage thumbnails for LibGen library, either by downloading them or
 generating from first page of PDF/DJVU.""")
 
-    oparser.add_option("", "--all", action="store_true", help="Process all records")
-    oparser.add_option("", "--id", metavar="ID[-IDLAST]", help="Process record(s) with given id(s)")
-    oparser.add_option("", "--hash", help="Process only record with given hash")
-    oparser.add_option("-l", "--limit", type="int", default=-1, help="Make at most LIMIT covers")
     oparser.add_option("", "--retry", type="int", default=3, help="Number of retries on network errors")
     oparser.add_option("-n", "--dry-run", action="store_true", help="Don't write anything to DB")
     oparser.add_option("-d", "--debug", action="store_true", default=False, help="Show debug logging (e.g. SQL)")
+
+    optgroup = optparse.OptionGroup(oparser, "Record selection options")
+    optgroup.add_option("", "--all", action="store_true", help="Process all records")
+    optgroup.add_option("", "--id", metavar="ID[-IDLAST]", help="Process record(s) with given id(s)")
+    optgroup.add_option("", "--hash", help="Process only record with given hash")
+    optgroup.add_option("-l", "--limit", type="int", default=-1, help="Make at most LIMIT covers")
+    oparser.add_option_group(optgroup)
+
+    optgroup = optparse.OptionGroup(oparser, "DB connection options")
+    optgroup.add_option("", "--db-host", default="localhost", help="DB host (%default)")
+    optgroup.add_option("", "--db-name", default="bookwarrior", help="DB name (%default)")
+    optgroup.add_option("", "--db-user", help="DB user")
+    optgroup.add_option("", "--db-passwd", metavar="PASSWD", default="", help="DB password (empty)")
+    oparser.add_option_group(optgroup)
 
     (options, args) = oparser.parse_args()
     if len(args) != 1:
         oparser.error("Wrong number of arguments")
     if len(filter(None, [options.all, options.id, options.hash])) != 1:
         oparser.error("One (and only one) of --all, --id= or --hash= must be specified")
+    if not options.db_user:
+        oparser.error("--db-user is required")
 
     logging.basicConfig(level=[logging.INFO, logging.DEBUG][options.debug])
     log = logging.getLogger()
@@ -111,7 +123,7 @@ generating from first page of PDF/DJVU.""")
     elif options.hash:
         range_where = " AND MD5='%s'" % options.hash
 
-    conn = MySQLdb.connect(host="localhost", user="pfalcon", passwd="", db="bookwarrior", use_unicode=True)
+    conn = MySQLdb.connect(host=options.db_host, user=options.db_user, passwd=options.db_passwd, db=options.db_name, use_unicode=True)
     cursor = conn.cursor(LoggingReadCursor)
     cursor.execute("SELECT ID, MD5, Filename, Coverurl FROM updated WHERE Coverurl LIKE 'http:%'" + range_where)
     cursor_write = conn.cursor(LoggingWriteCursor)
