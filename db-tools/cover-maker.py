@@ -33,14 +33,14 @@ class LoggingWriteCursor(MySQLdb.cursors.Cursor):
             MySQLdb.cursors.Cursor.execute(self, sql, values)
 
 def download_cover(cover_url, main_file_name):
-    global lib_root, options
+    global dest_root, options
     cover_ext = os.path.splitext(cover_url)[1]
     if not cover_ext:
         log.warning("%s: cover url has no file extension, using 'img' placeholder", row)
         cover_ext = '.img'
 
     dest_cover_name = main_file_name + cover_ext
-    dest_cover_path = os.path.join(lib_root, dest_cover_name)
+    dest_cover_path = os.path.join(dest_root, dest_cover_name)
     if not options.force and os.path.exists(dest_cover_path):
         log.info("Cover %s already exists, using as is", dest_cover_path)
         return dest_cover_name
@@ -67,6 +67,8 @@ def download_cover(cover_url, main_file_name):
             log.warning("Could not download cover, will retry: %s", e)
             time.sleep(2)
 
+    if not os.path.isdir(os.path.dirname(dest_cover_path)):
+        os.makedirs(os.path.dirname(dest_cover_path))
     shutil.move("cover.tmp", dest_cover_path)
     log.info("Downloaded cover to %s", dest_cover_path)
     return dest_cover_name
@@ -75,12 +77,15 @@ def download_cover(cover_url, main_file_name):
 log = None
 options = None
 lib_root = None
+dest_root = None
 
 def main():
-    global options, log, lib_root
-    oparser = optparse.OptionParser(usage="%prog <options> <lib path>", description="""\
+    global options, log, lib_root, dest_root
+    oparser = optparse.OptionParser(usage="%prog <options> <lib path> <dest path>", description="""\
 Make coverpage thumbnails for LibGen library, either by downloading them or
-generating from first page of PDF/DJVU.""")
+generating from first page of PDF/DJVU (todo). Path to library is given by first
+argument, covers are put under separate root specified by second argument
+(may be equal to library path).""")
 
     oparser.add_option("", "--retry", type="int", default=3, help="Number of retries on network errors")
     oparser.add_option("", "--force", action="store_true", help="Ignore local files, force redownloading/reconversion")
@@ -102,7 +107,7 @@ generating from first page of PDF/DJVU.""")
     oparser.add_option_group(optgroup)
 
     (options, args) = oparser.parse_args()
-    if len(args) != 1:
+    if len(args) != 2:
         oparser.error("Wrong number of arguments")
     if len(filter(None, [options.all, options.id, options.hash])) != 1:
         oparser.error("One (and only one) of --all, --id= or --hash= must be specified")
@@ -113,6 +118,7 @@ generating from first page of PDF/DJVU.""")
     log = logging.getLogger()
 
     lib_root = args[0]
+    dest_root = args[1]
     if options.all:
         range_where = ""
     elif options.id:
