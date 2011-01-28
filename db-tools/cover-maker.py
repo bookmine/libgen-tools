@@ -6,6 +6,7 @@ import logging
 import shutil
 import optparse
 import re
+import time
 
 import MySQLdb
 import MySQLdb.cursors
@@ -43,16 +44,27 @@ def download_cover(cover_url, main_file_name):
         log.warning("%s: cover url has no file extension, using 'img' placeholder", row)
         cover_ext = 'img'
 
-    try:
-        net_fp = urllib2.urlopen(cover_url)
-    except urllib2.HTTPError, e:
-        log.error("Could not fetch %s, server response: %s", cover_url, e)
-        return None
+    attempt = 0
+    while True:
+        try:
+            try:
+                net_fp = urllib2.urlopen(cover_url)
+            except urllib2.HTTPError, e:
+                log.error("Could not fetch %s, server response: %s", cover_url, e)
+                return None
 
-    cover_fp = open("cover.tmp", "wb")
-    shutil.copyfileobj(net_fp, cover_fp)
-    cover_fp.close()
-    net_fp.close()
+            cover_fp = open("cover.tmp", "wb")
+            shutil.copyfileobj(net_fp, cover_fp)
+            cover_fp.close()
+            net_fp.close()
+            break
+        except IOError, e:
+            if attempt >= options.retry:
+                log.error("Could not download cover %s, skipping: %s", cover_url, e)
+                return None
+            attempt += 1
+            log.warning("Could not download cover, will retry: %s", e)
+            time.sleep(2)
     dest_cover_name = main_file_name + "." + cover_ext
     dest_cover_path = os.path.join(lib_root, dest_cover_name)
     shutil.move("cover.tmp", dest_cover_path)
@@ -74,6 +86,7 @@ generating from first page of PDF/DJVU.""")
     oparser.add_option("", "--id", metavar="ID[-IDLAST]", help="Process record(s) with given id(s)")
     oparser.add_option("", "--hash", help="Process only record with given hash")
     oparser.add_option("-l", "--limit", type="int", default=-1, help="Process at most LIMIT records")
+    oparser.add_option("", "--retry", type="int", default=3, help="Number of retries on network errors")
     oparser.add_option("-n", "--dry-run", action="store_true", help="Don't write anything to DB")
     oparser.add_option("-d", "--debug", action="store_true", default=False, help="Show debug logging (e.g. SQL)")
 
