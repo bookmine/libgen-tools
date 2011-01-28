@@ -33,11 +33,17 @@ class LoggingWriteCursor(MySQLdb.cursors.Cursor):
             MySQLdb.cursors.Cursor.execute(self, sql, values)
 
 def download_cover(cover_url, main_file_name):
-    global lib_root
+    global lib_root, options
     cover_ext = os.path.splitext(cover_url)[1]
     if not cover_ext:
         log.warning("%s: cover url has no file extension, using 'img' placeholder", row)
         cover_ext = '.img'
+
+    dest_cover_name = main_file_name + cover_ext
+    dest_cover_path = os.path.join(lib_root, dest_cover_name)
+    if not options.force and os.path.exists(dest_cover_path):
+        log.info("Cover %s already exists, using as is", dest_cover_path)
+        return dest_cover_name
 
     attempt = 0
     while True:
@@ -60,8 +66,7 @@ def download_cover(cover_url, main_file_name):
             attempt += 1
             log.warning("Could not download cover, will retry: %s", e)
             time.sleep(2)
-    dest_cover_name = main_file_name + cover_ext
-    dest_cover_path = os.path.join(lib_root, dest_cover_name)
+
     shutil.move("cover.tmp", dest_cover_path)
     log.info("Downloaded cover to %s", dest_cover_path)
     return dest_cover_name
@@ -78,6 +83,7 @@ Make coverpage thumbnails for LibGen library, either by downloading them or
 generating from first page of PDF/DJVU.""")
 
     oparser.add_option("", "--retry", type="int", default=3, help="Number of retries on network errors")
+    oparser.add_option("", "--force", action="store_true", help="Ignore local files, force redownloading/reconversion")
     oparser.add_option("-n", "--dry-run", action="store_true", help="Don't write anything to DB")
     oparser.add_option("-d", "--debug", action="store_true", default=False, help="Show debug logging (e.g. SQL)")
 
