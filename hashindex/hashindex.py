@@ -79,6 +79,7 @@ class HashIndex(object):
         self.i_by_hash = {}
         self.i_by_size_hash = {}
         self.i_by_filename = {}
+        self.count = 0
 
     def load(self, index):
         fp = HashIndexReader(open(self.index_fname))
@@ -92,6 +93,7 @@ class HashIndex(object):
                 self.i_by_size_hash[(e["size"], e["hash"])] = e
             if index & self.INDEX_FILENAME:
                 self.i_by_filename[e["filename"]] = e
+            self.count += 1
 
     def by_filename(self, filename):
         return self.i_by_filename.get(filename)
@@ -99,10 +101,17 @@ class HashIndex(object):
     def mark(self, filename):
         self.i_by_filename[filename]["mark"] = True
 
+    def all(self):
+        for entry in self.i_by_filename.itervalues():
+            yield entry
+
     def unmarked(self):
         for entry in self.i_by_filename.itervalues():
             if not entry["mark"]:
                 yield entry
+
+    def __len__(self):
+        return self.count
 
 def hash_file(fname):
     fp = open(fname)
@@ -142,23 +151,39 @@ def index_directory(path, index=None, params={}, on_match=None, on_miss=None):
                     continue
             on_miss and on_miss(fullname, params)
 
+class MyOptionParser(optparse.OptionParser):
+
+    def parse_args(self):
+        self.my_options, self.my_args = optparse.OptionParser.parse_args(self)
+        return (self.my_options, self.my_args)
+
+    def need_args(self, num):
+        if len(self.my_args) != num:
+            oparser.error("Wrong number of arguments")
+
+def get_ext(fname):
+    if '.' in fname:
+        ext = fname.rsplit('.', 1)[1]
+        if len(ext) < 6:
+            return ext
+    return ''
 
 def main():
-    oparser = optparse.OptionParser(usage="%prog <command> <index file>")
+    oparser = MyOptionParser(usage="%prog <command> <index file> [<collection path>]")
     oparser.add_option('-c', '--create', action="store_true", help="Create index")
     oparser.add_option('', '--diff', action="store_true", help="Show changes between index and directory")
     oparser.add_option('-u', "--update", action="store_true", help="Update index")
+    oparser.add_option("", "--stats", action="store_true", help="Show stats on index")
 
     (options, args) = oparser.parse_args()
-    if len(args) < 2:
-        oparser.error("Not enough arguments")
-
 
     if options.create or options.update and not os.path.exists(args[0]):
+        oparser.need_args(2)
         out_fp = open(args[0], "w")
         index_directory(args[1], on_miss=output_new_entry, params={"fp": out_fp})
         out_fp.close()
     elif options.diff:
+        oparser.need_args(2)
         index = HashIndex(args[0])
         index.load(HashIndex.INDEX_FILENAME)
         # Output only files not existing in index
@@ -174,6 +199,7 @@ def main():
                 params["prefix"] = "-"
                 output_existing_entry(e, params=params)
     elif options.update:
+        oparser.need_args(2)
         index = HashIndex(args[0])
         index.load(HashIndex.INDEX_FILENAME)
         out_fp = open(args[0] + ".tmp", "w")
@@ -182,6 +208,16 @@ def main():
         index_directory(args[1], index, on_miss=output_new_entry, on_match=output_existing_entry, params={"fp": out_fp})
         out_fp.close()
         os.rename(args[0] + ".tmp", args[0])
+    elif options.stats:
+        oparser.need_args(1)
+        index = HashIndex(args[0])
+        index.load(HashIndex.INDEX_FILENAME)
+        print "Files in index:", len(index)
+        by_ext = {}
+        for e in index.all():
+            ext = get_ext(e["filename"]).lower()
+            by_ext[ext] = by_ext.get(ext, 0) + 1
+        print sorted(by_ext.items(), key=lambda p: p[1], reverse=True)
     else:
         oparser.error("No command")
 
