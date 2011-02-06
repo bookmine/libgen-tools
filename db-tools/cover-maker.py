@@ -130,7 +130,7 @@ def main():
     global options, log, lib_root, dest_root
     oparser = optparse.OptionParser(usage="%prog <options> <lib path> <dest path>", description="""\
 Make coverpage thumbnails for LibGen library, either by downloading them or
-generating from first page of PDF/DJVU (todo). Path to library is given by first
+rendering from first page of PDF/DJVU files. Path to library is given by first
 argument, covers are put under separate root specified by second argument
 (may be equal to library path).""")
 
@@ -138,12 +138,14 @@ argument, covers are put under separate root specified by second argument
     oparser.add_option("", "--force", action="store_true", help="Ignore local files, force redownloading/reconversion")
     oparser.add_option("-n", "--dry-run", action="store_true", help="Don't write anything to DB")
     oparser.add_option("-d", "--debug", action="store_true", default=False, help="Show debug logging (e.g. SQL)")
-    oparser.add_option("", "--cover-size", type="int", default=200, help="Max coverpage dimension (only for rendered)")
+    oparser.add_option("", "--cover-size", metavar="SIZE", type="int", default=200, help="Max coverpage dimension (only for rendered)")
 
     optgroup = optparse.OptionGroup(oparser, "Record selection options")
     optgroup.add_option("", "--all", action="store_true", help="Process all records")
     optgroup.add_option("", "--id", metavar="ID[-IDLAST]", help="Process record(s) with given id(s)")
     optgroup.add_option("", "--hash", help="Process only record with given hash")
+    optgroup.add_option("", "--only-dl", action="store_true", help="Process only records requiring download")
+    optgroup.add_option("", "--only-render", action="store_true", help="Process only records requiring rendering")
     optgroup.add_option("-l", "--limit", type="int", default=-1, help="Make at most LIMIT covers")
     oparser.add_option_group(optgroup)
 
@@ -180,7 +182,14 @@ argument, covers are put under separate root specified by second argument
 
     conn = MySQLdb.connect(host=options.db_host, user=options.db_user, passwd=options.db_passwd, db=options.db_name, use_unicode=True)
     cursor = conn.cursor(LoggingReadCursor)
-    cursor.execute("SELECT ID, Filename, Coverurl, Extension FROM updated WHERE (Coverurl LIKE 'http:%' OR (Coverurl='' AND Extension IN ('pdf', 'djvu'))) AND Filename != '' " + range_where)
+    cond = ("Coverurl LIKE 'http:%'", "(Coverurl='' AND Extension IN ('pdf', 'djvu'))")
+    if options.only_dl:
+        cond = cond[0]
+    elif options.only_render:
+        cond = cond[1]
+    else:
+        cond = "(%s OR %s)" % cond
+    cursor.execute("SELECT ID, Filename, Coverurl, Extension FROM updated WHERE " + cond + " AND Filename != '' " + range_where)
     cursor_write = conn.cursor(LoggingWriteCursor)
     total = 0
     processed = 0
