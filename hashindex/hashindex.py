@@ -98,6 +98,9 @@ class HashIndex(object):
     def by_filename(self, filename):
         return self.i_by_filename.get(filename)
 
+    def by_hash(self, hash):
+        return self.i_by_hash.get(hash)
+
     def mark(self, filename):
         self.i_by_filename[filename]["mark"] = True
 
