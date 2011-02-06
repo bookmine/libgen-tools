@@ -3,18 +3,18 @@ import sys
 import os
 import urllib2
 import logging
+import glob
 import shutil
 import optparse
 import re
 import time
+import subprocess
 
 import MySQLdb
 import MySQLdb.cursors
 
 
-#pdftoppm -f 1 -l 1 -scale-to 150 -jpeg Математика\ 2006-11.pdf .
-
-#ddjvu -format=ppm -page=1 -size=150x150 Силин_А.В.\,_Шмакова_Н.А.-Открываем_неевклидову_геометрию\(1988\).djvu a.ppm
+COVER_SIZE = 200
 
 class LoggingReadCursor(MySQLdb.cursors.Cursor):
 
@@ -32,18 +32,32 @@ class LoggingWriteCursor(MySQLdb.cursors.Cursor):
             log.debug("Executing SQL: %s; args: %s", sql, values)
             MySQLdb.cursors.Cursor.execute(self, sql, values)
 
-def download_cover(cover_url, main_file_name):
+def cover_name_path(main_file_name, suffix, ext):
     global dest_root, options
+    dest_cover_name = main_file_name + suffix + ext
+    dest_cover_path = os.path.join(dest_root, dest_cover_name)
+    exists = False
+    if not options.force and os.path.exists(dest_cover_path):
+        log.info("Cover %s already exists, using as is", dest_cover_path)
+        exists = True
+
+    return dest_cover_name, dest_cover_path, exists
+
+def move_to_dest(from_name, to_name):
+    if not os.path.isdir(os.path.dirname(to_name)):
+        os.makedirs(os.path.dirname(to_name))
+    shutil.move(from_name, to_name)
+
+def download_cover(main_file_name, cover_url):
+    global options
     cover_ext = os.path.splitext(cover_url)[1]
     if not cover_ext:
         log.warning("%s: cover url has no file extension, using 'img' placeholder", row)
         cover_ext = '.img'
 
     # -d suffix means "downloaded"
-    dest_cover_name = main_file_name + "-d" + cover_ext
-    dest_cover_path = os.path.join(dest_root, dest_cover_name)
-    if not options.force and os.path.exists(dest_cover_path):
-        log.info("Cover %s already exists, using as is", dest_cover_path)
+    dest_cover_name, dest_cover_path, exists = cover_name_path(main_file_name, "-d", cover_ext)
+    if exists:
         return dest_cover_name
 
     attempt = 0
@@ -68,11 +82,42 @@ def download_cover(cover_url, main_file_name):
             log.warning("Could not download cover, will retry: %s", e)
             time.sleep(2)
 
-    if not os.path.isdir(os.path.dirname(dest_cover_path)):
-        os.makedirs(os.path.dirname(dest_cover_path))
-    shutil.move("cover.tmp", dest_cover_path)
+    move_to_dest("cover.tmp", dest_cover_path)
     log.info("Downloaded cover to %s", dest_cover_path)
     return dest_cover_name
+
+def render_cover(main_file_name, type):
+    global lib_root
+    src_name = os.path.join(lib_root, main_file_name)
+    if not os.path.exists(src_name):
+        log.info("Book file %s does not exist, skipping", src_name)
+        return None
+
+    # -g suffix means "generated"
+    dest_cover_name, dest_cover_path, exists = cover_name_path(main_file_name, "-g", ".jpg")
+    if exists:
+        return dest_cover_name
+
+    try:
+        if type == "pdf":
+            for f in glob.glob("tmpcover-*.ppm"): 
+                os.remove(f)
+            subprocess.check_call(["pdftoppm", "-f", "1", "-l", "1", src_name, "tmpcover"])
+            files = glob.glob("tmpcover-*.ppm")
+            assert len(files) == 1
+            ppm_name = files[0]
+        elif type == "djvu":
+            subprocess.check_call(["ddjvu", "-format=ppm", "-page=1", "-size=%dx%d" % (COVER_SIZE, COVER_SIZE), src_name, "tmpcover.ppm"])
+            ppm_name = "tmpcover.ppm"
+        subprocess.check_call(["convert", "-scale", "%dx%d" % (COVER_SIZE, COVER_SIZE), ppm_name, "tmpcover.jpg"])
+    except subprocess.CalledProcessError:
+        log.error("Error executing page extraction commands, skipping %s", src_name)
+        return None
+
+    move_to_dest("tmpcover.jpg", dest_cover_path)
+    log.info("Rendered %s cover to %s", type, dest_cover_path)
+    return dest_cover_name
+
 
 # Global vars
 log = None
@@ -133,7 +178,7 @@ argument, covers are put under separate root specified by second argument
 
     conn = MySQLdb.connect(host=options.db_host, user=options.db_user, passwd=options.db_passwd, db=options.db_name, use_unicode=True)
     cursor = conn.cursor(LoggingReadCursor)
-    cursor.execute("SELECT ID, MD5, Filename, Coverurl FROM updated WHERE Coverurl LIKE 'http:%'" + range_where)
+    cursor.execute("SELECT ID, Filename, Coverurl, Extension FROM updated WHERE (Coverurl LIKE 'http:%' OR (Coverurl='' AND Extension IN ('pdf', 'djvu'))) AND Filename != '' " + range_where)
     cursor_write = conn.cursor(LoggingWriteCursor)
     total = 0
     processed = 0
@@ -144,7 +189,11 @@ argument, covers are put under separate root specified by second argument
         if not row:
             break
         total += 1
-        dest_cover_name = download_cover(row[3], row[2])
+        if row[2] == "":
+            dest_cover_name = render_cover(row[1], row[3])
+        else:
+            dest_cover_name = download_cover(row[1], row[2])
+
         if dest_cover_name:
             cursor_write.execute("UPDATE updated SET Coverurl=%s WHERE ID=%s", (dest_cover_name, row[0]))
             processed += 1
