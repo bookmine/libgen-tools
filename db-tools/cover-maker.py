@@ -14,8 +14,6 @@ import MySQLdb
 import MySQLdb.cursors
 
 
-COVER_SIZE = 200
-
 class LoggingReadCursor(MySQLdb.cursors.Cursor):
 
     def execute(self, sql, values=None):
@@ -87,7 +85,7 @@ def download_cover(main_file_name, cover_url):
     return dest_cover_name
 
 def render_cover(main_file_name, type):
-    global lib_root
+    global lib_root, options
     src_name = os.path.join(lib_root, main_file_name)
     if not os.path.exists(src_name):
         log.info("Book file %s does not exist, skipping", src_name)
@@ -98,6 +96,7 @@ def render_cover(main_file_name, type):
     if exists:
         return dest_cover_name
 
+    size = "%dx%d" % (options.cover_size, options.cover_size)
     try:
         if type == "pdf":
             # Different version of pdftoppm may produce different number of digits
@@ -109,9 +108,9 @@ def render_cover(main_file_name, type):
             assert len(files) == 1
             ppm_name = files[0]
         elif type == "djvu":
-            subprocess.check_call(["ddjvu", "-format=ppm", "-page=1", "-size=%dx%d" % (COVER_SIZE, COVER_SIZE), src_name, "tmpcover.ppm"])
+            subprocess.check_call(["ddjvu", "-format=ppm", "-page=1", "-size=" + size, src_name, "tmpcover.ppm"])
             ppm_name = "tmpcover.ppm"
-        subprocess.check_call(["convert", "-scale", "%dx%d" % (COVER_SIZE, COVER_SIZE), ppm_name, "tmpcover.jpg"])
+        subprocess.check_call(["convert", "-scale", size, ppm_name, "tmpcover.jpg"])
     except subprocess.CalledProcessError:
         log.error("Error executing page extraction commands, skipping %s", src_name)
         return None
@@ -139,6 +138,7 @@ argument, covers are put under separate root specified by second argument
     oparser.add_option("", "--force", action="store_true", help="Ignore local files, force redownloading/reconversion")
     oparser.add_option("-n", "--dry-run", action="store_true", help="Don't write anything to DB")
     oparser.add_option("-d", "--debug", action="store_true", default=False, help="Show debug logging (e.g. SQL)")
+    oparser.add_option("", "--cover-size", type="int", default=200, help="Max coverpage dimension (only for rendered)")
 
     optgroup = optparse.OptionGroup(oparser, "Record selection options")
     optgroup.add_option("", "--all", action="store_true", help="Process all records")
