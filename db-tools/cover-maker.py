@@ -100,6 +100,8 @@ def render_cover(main_file_name, type):
 
     try:
         if type == "pdf":
+            # Different version of pdftoppm may produce different number of digits
+            # for different files, so have to use glob.
             for f in glob.glob("tmpcover-*.ppm"): 
                 os.remove(f)
             subprocess.check_call(["pdftoppm", "-f", "1", "-l", "1", src_name, "tmpcover"])
