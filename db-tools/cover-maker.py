@@ -50,7 +50,7 @@ def download_cover(main_file_name, cover_url):
     global options
     cover_ext = os.path.splitext(cover_url)[1]
     if not cover_ext:
-        log.warning("%s: cover url has no file extension, using 'img' placeholder", row)
+        log.warning("%s: cover url has no file extension, using 'img' placeholder", cover_url)
         cover_ext = '.img'
 
     # -d suffix means "downloaded"
