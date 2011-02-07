@@ -169,6 +169,8 @@ argument, covers are put under separate root specified by second argument
 
     lib_root = args[0]
     dest_root = args[1]
+
+    # Prepare range condition
     if options.all:
         range_where = ""
     elif options.id:
@@ -180,17 +182,20 @@ argument, covers are put under separate root specified by second argument
     elif options.hash:
         range_where = " AND MD5='%s'" % options.hash
 
+    # Prepare kind condition
+    only_kind_where = ("Coverurl LIKE 'http:%'", "(Coverurl='' AND Extension IN ('pdf', 'djvu'))")
+    if options.only_dl:
+        only_kind_where = only_kind_where[0]
+    elif options.only_render:
+        only_kind_where = only_kind_where[1]
+    else:
+        only_kind_where = "(%s OR %s)" % only_kind_where
+
     conn = MySQLdb.connect(host=options.db_host, user=options.db_user, passwd=options.db_passwd, db=options.db_name, use_unicode=True)
     cursor = conn.cursor(LoggingReadCursor)
-    cond = ("Coverurl LIKE 'http:%'", "(Coverurl='' AND Extension IN ('pdf', 'djvu'))")
-    if options.only_dl:
-        cond = cond[0]
-    elif options.only_render:
-        cond = cond[1]
-    else:
-        cond = "(%s OR %s)" % cond
-    cursor.execute("SELECT ID, Filename, Coverurl, Extension FROM updated WHERE " + cond + " AND Filename != '' " + range_where)
+    cursor.execute("SELECT ID, Filename, Coverurl, Extension FROM updated WHERE " + only_kind_where + " AND Filename != '' " + range_where)
     cursor_write = conn.cursor(LoggingWriteCursor)
+
     total = 0
     processed = 0
     while True:
