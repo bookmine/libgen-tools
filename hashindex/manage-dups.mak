@@ -3,7 +3,7 @@ SCRIPTS=$(dir $(MAKEFILE_LIST))
 all: md5deep.txt.dup.size-fname
 
 md5deep.txt:
-	python "$(SCRIPTS)/hashindex.py" $@ --update $(LIB)
+	python "$(SCRIPTS)/hashindex.py" --update $@@$(LIB)
 #	md5deep -e -l -r -z ../lib >$@
 
 md5deep.txt.sorted: md5deep.txt
@@ -24,7 +24,7 @@ md5deep.txt.dup.size-fname: md5deep.txt.dup
 
 # Diff index and lib dir
 diff: md5deep.txt
-	python "$(SCRIPTS)/hashindex.py" $^ --diff $(LIB)
+	python "$(SCRIPTS)/hashindex.py" --diff $^@$(LIB)
 
 # Delete what's marked in md5deep.txt.dup.size-fname
 delete: md5deep.txt.dup.size-fname
