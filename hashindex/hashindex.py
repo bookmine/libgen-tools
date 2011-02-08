@@ -145,6 +145,7 @@ def index_directory(path, index=None, params={}, on_match=None, on_miss=None):
     """
     for dirpath, dirnames, filenames in os.walk(path):
         for fname in filenames:
+            if fname == ".index.hash.txt": continue
             fullname = os.path.join(dirpath, fname)
             if index:
                 e = index.by_filename(fullname)
@@ -153,6 +154,13 @@ def index_directory(path, index=None, params={}, on_match=None, on_miss=None):
                     on_match and on_match(e, params)
                     continue
             on_miss and on_miss(fullname, params)
+
+class NowrapHelpFormatter(optparse.IndentedHelpFormatter):
+    def format_description(self, description):
+        if description:
+            return description + "\n"
+        else:
+            return ""
 
 class MyOptionParser(optparse.OptionParser):
 
@@ -174,8 +182,46 @@ def splitext(fname):
         return parts
     return (fname, '')
 
+
+class IndexSpec(object):
+    "Store location of index and related collection"
+
+    def __init__(self, spec=None, index=None, coll=None):
+        if spec:
+            self.parse(spec)
+        else:
+            self.index = index
+            self.coll = coll
+
+    def parse(self, spec):
+        if spec[0] == '@':
+            self.coll = spec[1:]
+            self.index = self.coll + "/.index.hash.txt"
+        elif spec[0] == '^':
+            self.coll = spec[1:]
+            dir, base = os.path.split(self.coll)
+            self.index = dir + "/" + base + ".hash.txt"
+        elif '@' in spec:
+            self.index, self.coll = spec.split('@', 1)
+        else:
+            self.index = spec
+            self.coll = None
+
+    def index_exists(self):
+        return os.path.exists(self.index)
+
+    def coll_exists(self):
+        return os.path.isdir(self.coll)
+
 def main():
-    oparser = MyOptionParser(usage="%prog <command> <index file> [<collection path>]")
+    oparser = MyOptionParser(usage="%prog <command> <index spec> [<index spec>]", formatter=NowrapHelpFormatter(),
+                             description="""\
+Perform operations on a hash index(es) of digital collection.
+
+<index spec> gives location of the collection and index:
+@<path>: collection at <path>, index at <path>/.index.hash.txt
+^<path>: collection at <path>, index at <dirname path>/<basename path>.hash.txt
+<index path>@<collection path>: as specified""")
     oparser.add_option('-c', '--create', action="store_true", help="Create index")
     oparser.add_option('', '--diff', action="store_true", help="Show changes between index and directory")
     oparser.add_option('-u', "--update", action="store_true", help="Update index")
@@ -183,20 +229,25 @@ def main():
 
     (options, args) = oparser.parse_args()
 
-    if options.create or options.update and not os.path.exists(args[0]):
-        oparser.need_args(2)
-        out_fp = open(args[0], "w")
-        index_directory(args[1], on_miss=output_new_entry, params={"fp": out_fp})
+    if len(args) > 0:
+        index1_spec = IndexSpec(args[0])
+    else:
+        index1_spec = IndexSpec()
+
+    if options.create or (options.update and not index1_spec.index_exists()):
+        oparser.need_args(1)
+        out_fp = open(index1_spec.index, "w")
+        index_directory(index1_spec.coll, on_miss=output_new_entry, params={"fp": out_fp})
         out_fp.close()
     elif options.diff:
-        oparser.need_args(2)
-        index = HashIndex(args[0])
+        oparser.need_args(1)
+        index = HashIndex(index1_spec.index)
         index.load(HashIndex.INDEX_FILENAME)
         # Output only files not existing in index
         params = {"fp": sys.stdout, "prefix": "+"}
-        index_directory(args[1], index, on_miss=output_new_entry, params=params)
+        index_directory(index1_spec.coll, index, on_miss=output_new_entry, params=params)
         # Now unmarked files in index - deleted from dir
-        dir = args[1]
+        dir = index1_spec.coll
         # Make sure we compare complete path components and don't match "/foo" with "/foobar"
         if dir[-1] != '/':
             dir += '/'
@@ -205,18 +256,18 @@ def main():
                 params["prefix"] = "-"
                 output_existing_entry(e, params=params)
     elif options.update:
-        oparser.need_args(2)
-        index = HashIndex(args[0])
+        oparser.need_args(1)
+        index = HashIndex(index1_spec.index)
         index.load(HashIndex.INDEX_FILENAME)
-        out_fp = open(args[0] + ".tmp", "w")
+        out_fp = open(index1_spec.index + ".tmp", "w")
         # Just calc hash and dump for new files, and re-dump existing entries
         # Old entries are automagically gone
-        index_directory(args[1], index, on_miss=output_new_entry, on_match=output_existing_entry, params={"fp": out_fp})
+        index_directory(index1_spec.coll, index, on_miss=output_new_entry, on_match=output_existing_entry, params={"fp": out_fp})
         out_fp.close()
-        os.rename(args[0] + ".tmp", args[0])
+        os.rename(index1_spec.index + ".tmp", index1_spec.index)
     elif options.stats:
         oparser.need_args(1)
-        index = HashIndex(args[0])
+        index = HashIndex(index1_spec.index)
         index.load(HashIndex.INDEX_FILENAME)
         print "Files in index:", len(index)
         by_ext = {}
