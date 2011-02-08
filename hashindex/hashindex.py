@@ -222,6 +222,7 @@ Perform operations on a hash index(es) of digital collection.
 @<path>: collection at <path>, index at <path>/.index.hash.txt
 ^<path>: collection at <path>, index at <dirname path>/<basename path>.hash.txt
 <index path>@<collection path>: as specified""")
+    oparser.add_option('-l', '--limit', type="int", default=None, help="Limit action to N iterations")
     oparser.add_option('-c', '--create', action="store_true", help="Create index")
     oparser.add_option('', '--diff', action="store_true", help="Show changes between index and directory")
     oparser.add_option('-u', "--update", action="store_true", help="Update index")
@@ -269,12 +270,13 @@ Perform operations on a hash index(es) of digital collection.
         oparser.need_args(1)
         index = HashIndex(index1_spec.index)
         index.load(HashIndex.INDEX_FILENAME)
-        print "Files in index:", len(index)
+        print "%-10s %d" % ("Total:", len(index))
         by_ext = {}
         for e in index.all():
-            ext = splitext(e["filename"])[1]
+            ext = splitext(e["filename"])[1].lower()
             by_ext[ext] = by_ext.get(ext, 0) + 1
-        print sorted(by_ext.items(), key=lambda p: p[1], reverse=True)
+        for ext, count in sorted(by_ext.items(), key=lambda p: p[1], reverse=True)[:options.limit]:
+            print "%-10s %d" % (ext, count)
     else:
         oparser.error("No command")
 
