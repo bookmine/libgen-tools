@@ -133,27 +133,33 @@ def format_index_entry(e):
 def output_existing_entry(entry, params):
     params["fp"].write(params.get("prefix", "") + format_index_entry(entry))
 
-def output_new_entry(fullname, params):
+def output_new_entry(fullname, output_name, params):
     st = os.stat(fullname)
-    e = {"size": st[stat.ST_SIZE], "hash": hash_file(fullname), "filename": fullname}
+    e = {"size": st[stat.ST_SIZE], "hash": hash_file(fullname), "filename": output_name}
     params["fp"].write(params.get("prefix", "") + format_index_entry(e))
 
-def index_directory(path, index=None, params={}, on_match=None, on_miss=None):
+def index_directory(options, path, index=None, params={}, on_match=None, on_miss=None):
     """Recursively scan directory. For each file found, if index given, look
     it up there. If found, mark file in index, call on_match function if any.
     Otherwise, call on_miss function.
     """
+    if not options.relative_path:
+        path = os.path.abspath(path)
+    l = len(path)
+
     for dirpath, dirnames, filenames in os.walk(path):
         for fname in filenames:
-            if fname == ".index.hash.txt": continue
-            fullname = os.path.join(dirpath, fname)
+            if fname.startswith(".index.hash.txt"): continue
+            fullname = output_name = os.path.join(dirpath, fname)
+            if options.bare_path:
+                output_name = fullname[l + 1:]
             if index:
                 e = index.by_filename(fullname)
                 if e:
                     index.mark(fullname)
                     on_match and on_match(e, params)
                     continue
-            on_miss and on_miss(fullname, params)
+            on_miss and on_miss(fullname, output_name, params)
 
 class NowrapHelpFormatter(optparse.IndentedHelpFormatter):
     def format_description(self, description):
@@ -200,7 +206,7 @@ class IndexSpec(object):
         elif spec[0] == '^':
             self.coll = spec[1:]
             dir, base = os.path.split(self.coll)
-            self.index = dir + "/" + base + ".hash.txt"
+            self.index = os.path.join(dir, base + ".hash.txt")
         elif '@' in spec:
             self.index, self.coll = spec.split('@', 1)
         else:
@@ -222,7 +228,9 @@ Perform operations on a hash index(es) of digital collection.
 @<path>: collection at <path>, index at <path>/.index.hash.txt
 ^<path>: collection at <path>, index at <dirname path>/<basename path>.hash.txt
 <index path>@<collection path>: as specified""")
-    oparser.add_option('-l', '--limit', type="int", default=None, help="Limit action to N iterations")
+    oparser.add_option("-l", "--relative-path", action="store_true", help="Don't convert file paths to absolute")
+    oparser.add_option("-b", "--bare-path", action="store_true", help="Store path relative to the collection root")
+    oparser.add_option("--limit", type="int", default=None, help="Limit action to N iterations")
     oparser.add_option('-c', '--create', action="store_true", help="Create index")
     oparser.add_option('', '--diff', action="store_true", help="Show changes between index and directory")
     oparser.add_option('-u', "--update", action="store_true", help="Update index")
@@ -236,9 +244,10 @@ Perform operations on a hash index(es) of digital collection.
         index1_spec = IndexSpec()
 
     if options.create or (options.update and not index1_spec.index_exists()):
+        print index1_spec.index
         oparser.need_args(1)
         out_fp = open(index1_spec.index, "w")
-        index_directory(index1_spec.coll, on_miss=output_new_entry, params={"fp": out_fp})
+        index_directory(options, index1_spec.coll, on_miss=output_new_entry, params={"fp": out_fp})
         out_fp.close()
     elif options.diff:
         oparser.need_args(1)
@@ -246,7 +255,7 @@ Perform operations on a hash index(es) of digital collection.
         index.load(HashIndex.INDEX_FILENAME)
         # Output only files not existing in index
         params = {"fp": sys.stdout, "prefix": "+"}
-        index_directory(index1_spec.coll, index, on_miss=output_new_entry, params=params)
+        index_directory(options, index1_spec.coll, index, on_miss=output_new_entry, params=params)
         # Now unmarked files in index - deleted from dir
         dir = index1_spec.coll
         # Make sure we compare complete path components and don't match "/foo" with "/foobar"
@@ -263,7 +272,7 @@ Perform operations on a hash index(es) of digital collection.
         out_fp = open(index1_spec.index + ".tmp", "w")
         # Just calc hash and dump for new files, and re-dump existing entries
         # Old entries are automagically gone
-        index_directory(index1_spec.coll, index, on_miss=output_new_entry, on_match=output_existing_entry, params={"fp": out_fp})
+        index_directory(options, index1_spec.coll, index, on_miss=output_new_entry, on_match=output_existing_entry, params={"fp": out_fp})
         out_fp.close()
         os.rename(index1_spec.index + ".tmp", index1_spec.index)
     elif options.stats:
