@@ -1,10 +1,11 @@
 SCRIPTS=$(dir $(MAKEFILE_LIST))
-INDEX=$(dir $(LIB:/=))$(notdir $(LIB:/=)).hash.txt
+LIBSPEC=@$(LIB)
+INDEX=$(LIB)/.index.hash.txt
 
 all: md5deep.txt.dup.size-fname
 
-$(INDEX): $(LIB)
-	python "$(SCRIPTS)hashindex.py" --update ^$(LIB)
+$(INDEX):
+	python "$(SCRIPTS)hashindex.py" --update $(LIBSPEC)
 #	md5deep -e -l -r -z ../lib >$@
 
 md5deep.txt.sorted: $(INDEX)
@@ -25,7 +26,7 @@ md5deep.txt.dup.size-fname: md5deep.txt.dup
 
 # Diff index and lib dir
 diff: $(INDEX)
-	python "$(SCRIPTS)/hashindex.py" --diff ^$(LIB)
+	python "$(SCRIPTS)/hashindex.py" --diff $(LIBSPEC)
 
 # Delete what's marked in md5deep.txt.dup.size-fname
 delete: md5deep.txt.dup.size-fname
