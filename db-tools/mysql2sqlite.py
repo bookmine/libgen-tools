@@ -2,6 +2,7 @@ import sys
 import re
 from cStringIO import StringIO
 import optparse
+import re
 
 
 oparser = optparse.OptionParser(usage="%prog <options> <mysql db dump>", description="""\
@@ -21,9 +22,20 @@ def open_for_table(table):
     "Overwrite file on 1st open, and append on all next."
     if table not in table_map:
         table_map[table] = True
-        return open(table + ".sql", "w")
+        fp = open(table + ".sql", "w")
+        fp.write("PRAGMA synchronous =  OFF;\n")
+        return fp
     else:
         return open(table + ".sql", "a")
+
+re_term = re.compile(r"'.*?'|[^,)]+")
+re_slash = re.compile(r"\\.")
+
+def repl_f(m):
+    s = m.group()
+    if s[1] == "'":
+        return "\x01"
+    return s[1]
 
 def break_insert(l):
     "Break multi-row insert into single-row ones."
@@ -36,41 +48,37 @@ def break_insert(l):
     f.write("BEGIN;\n")
 
     l = l[i:]
+    l = re.sub(re_slash, repl_f, l)
     i = 0
     while l[i] == '(':
         out = StringIO()
         out.write(l[i])
         i += 1
         while l[i] != ')':
-            if l[i] != "'":
+            m = re_term.match(l, i)
+            assert m, l[i:i+30]
+#            print "=%s=" % m.group()
+            t = m.group()
+            t = t.replace("\x01", "''")
+            if "),(" in t:
+                print "!!!", t[0:3000]
+            out.write(t)
+            i = m.end(0)
+            assert l[i] in (',', ')')
+            if l[i] == ',':
                 out.write(l[i])
                 i += 1
-            else:
-                out.write(l[i])
-                i += 1
-                while l[i] != "'":
-                    if l[i] == "\\":
-                        i += 1
-                        if l[i] == "'":
-                            out.write("''")
-                        else:
-                            out.write(l[i])
-                        i += 1
-                    else:
-                        out.write(l[i])
-                        i += 1
-                out.write(l[i])
-                i += 1 # Skip trailing "'"
-        assert l[i] == ")"
+#        assert l[i] == ")"
         out.write(l[i])
         i += 1 # skip trailing ')'
         f.write(statement)
         f.write(out.getvalue())
         f.write(';\n')
+#        assert l[i] in (',', ';')
         if l[i] == ',':
             i += 1
     assert l[i] == ';', l[i:i+30]
-    f.write("END;\n")
+    f.write("COMMIT;\n")
     f.write('--\n')
     f.close()
 
@@ -98,19 +106,19 @@ for l in f:
                 create.append(l.rstrip())
                 l = f.next()
             create.append(l.strip())
-            print "Before:"
-            print "\n".join(create)
+#            print "Before:"
+#            print "\n".join(create)
             cols = create[1:-1]
             cols = [decl[:-1] if decl.endswith(',') else decl for decl in cols]
             indexes = [decl.strip().split() for decl in cols if "KEY" in decl]
             cols = [process_col_decs(decl) for decl in cols]
             # Remove empty decls
             cols = [decl for decl in cols if decl]
-            print "After:"
+#            print "After:"
             out = create[0] + "\n" + ",\n".join(cols) + "\n);\n"
-            print out
-            print "Indexes:"
-            print indexes
+#            print out
+#            print "Indexes:"
+#            print indexes
             f_creates.write(out)
 
             m = re.match(r"CREATE TABLE `?(.+?)`? \(", create[0])
