@@ -232,7 +232,7 @@ Perform operations on a hash index(es) of digital collection.
     oparser.add_option("-b", "--bare-path", action="store_true", help="Store path relative to the collection root")
     oparser.add_option("--limit", type="int", default=None, help="Limit action to N iterations")
     oparser.add_option('-c', '--create', action="store_true", help="Create index")
-    oparser.add_option('', '--diff', action="store_true", help="Show changes between index and directory")
+    oparser.add_option('', '--changes', action="store_true", help="Show changes between index and directory")
     oparser.add_option('-u', "--update", action="store_true", help="Update index")
     oparser.add_option("", "--stats", action="store_true", help="Show stats on index")
 
@@ -249,7 +249,7 @@ Perform operations on a hash index(es) of digital collection.
         out_fp = open(index1_spec.index, "w")
         index_directory(options, index1_spec.coll, on_miss=output_new_entry, params={"fp": out_fp})
         out_fp.close()
-    elif options.diff:
+    elif options.changes:
         oparser.need_args(1)
         index = HashIndex(index1_spec.index)
         index.load(HashIndex.INDEX_FILENAME)
