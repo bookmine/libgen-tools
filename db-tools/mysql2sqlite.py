@@ -1,9 +1,18 @@
 import sys
 import re
 from cStringIO import StringIO
+import optparse
 
 
-f = open(sys.argv[1])
+oparser = optparse.OptionParser(usage="%prog <options> <mysql db dump>", description="""\
+Convert MySQL DB dump into SQLite DB dump
+""")
+
+(options, args) = oparser.parse_args()
+if len(args) != 1:
+    oparser.error("Wrong number of arguments")
+
+f = open(args[0])
 
 f_creates = open("schema.sql", "w")
 
