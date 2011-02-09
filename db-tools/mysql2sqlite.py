@@ -23,7 +23,7 @@ def open_for_table(table):
     if table not in table_map:
         table_map[table] = True
         fp = open(table + ".sql", "w")
-        fp.write("PRAGMA synchronous =  OFF;\n")
+#        fp.write("PRAGMA synchronous =  OFF;\n")
         return fp
     else:
         return open(table + ".sql", "a")
@@ -88,6 +88,7 @@ def process_col_decs(decl):
         return ""
     if re.match(" *KEY `", decl):
         return ""
+    decl = re.sub(r"int\(\d+\)", "INTEGER", decl)
     decl = re.sub(r"UNIQUE KEY `.+?`", "UNIQUE", decl)
     decl = re.sub(r"AUTO_INCREMENT", "", decl)
     decl = re.sub(r"unsigned", "", decl)
