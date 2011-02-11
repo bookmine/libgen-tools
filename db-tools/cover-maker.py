@@ -14,6 +14,8 @@ import MySQLdb
 import MySQLdb.cursors
 
 
+USE_OS_SYSTEM = True
+
 class LoggingReadCursor(MySQLdb.cursors.Cursor):
 
     def execute(self, sql, values=None):
@@ -29,6 +31,15 @@ class LoggingWriteCursor(MySQLdb.cursors.Cursor):
         else:
             log.debug("Executing SQL: %s; args: %s", sql, values)
             MySQLdb.cursors.Cursor.execute(self, sql, values)
+
+def system(args):
+    if USE_OS_SYSTEM:
+        cmd = " ".join(args)
+        status = os.system(cmd)
+        if status != 0:
+            raise subprocess.CalledProcessError(status, args)
+    else:
+        subprocess.check_call(args)
 
 def cover_name_path(main_file_name, suffix, ext):
     global dest_root, options
@@ -103,16 +114,16 @@ def render_cover(main_file_name, type):
             # for different files, so have to use glob.
             for f in glob.glob("tmpcover-*.ppm"): 
                 os.remove(f)
-            subprocess.check_call(["pdftoppm", "-f", "1", "-l", "1", src_name, "tmpcover"])
+            system(["pdftoppm", "-f", "1", "-l", "1", src_name, "tmpcover"])
             files = glob.glob("tmpcover-*.ppm")
             assert len(files) == 1
             ppm_name = files[0]
         elif type == "djvu":
-            subprocess.check_call(["ddjvu", "-format=ppm", "-page=1", "-size=" + size, src_name, "tmpcover.ppm"])
+            system(["ddjvu", "-format=ppm", "-page=1", "-size=" + size, src_name, "tmpcover.ppm"])
             ppm_name = "tmpcover.ppm"
-        subprocess.check_call(["convert", "-scale", size, ppm_name, "tmpcover.jpg"])
-    except subprocess.CalledProcessError:
-        log.error("Error executing page extraction commands, skipping %s", src_name)
+        system(["convert", "-scale", size, ppm_name, "tmpcover.jpg"])
+    except subprocess.CalledProcessError, e:
+        log.error('Error executing page extraction command "%s", skipping %s', e.cmd, src_name)
         return None
 
     move_to_dest("tmpcover.jpg", dest_cover_path)
