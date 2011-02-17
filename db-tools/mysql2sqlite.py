@@ -8,6 +8,8 @@ import re
 oparser = optparse.OptionParser(usage="%prog <options> <mysql db dump>", description="""\
 Convert MySQL DB dump into SQLite DB dump
 """)
+oparser.add_option("", "--only-schema", action="store_true", help="Ignore INSERT data")
+oparser.add_option("", "--delay-constraints", action="store_true", help="Delay adding constraints until after data INSERTed")
 
 (options, args) = oparser.parse_args()
 if len(args) != 1:
@@ -86,7 +88,7 @@ def break_insert(l):
 def process_col_decs(decl):
     if "FULLTEXT KEY" in decl:
         return ""
-    if re.match(" *KEY `", decl):
+    if re.match(r" *(UNIQUE )?KEY `", decl):
         return ""
     decl = re.sub(r"int\(\d+\)", "INTEGER", decl)
     decl = re.sub(r"UNIQUE KEY `.+?`", "UNIQUE", decl)
@@ -95,9 +97,18 @@ def process_col_decs(decl):
     decl = re.sub(r"ON UPDATE (.+),?", "", decl)
     return decl
 
+def clean_name(n):
+    if n[0] == "`":
+        return n[1:-1]
+    return n
+
+
+delayed_constarints = []
+
 for l in f:
     if l.startswith("INSERT"):
-        break_insert(l)
+        if not options.only_schema:
+            break_insert(l)
     else:
         if re.match(r"^CREATE DATABASE|^USE|^LOCK|^UNLOCK", l):
             continue
@@ -127,6 +138,20 @@ for l in f:
             for ind in indexes:
                 if ind[0] == "KEY":
                     #['KEY', '`lastdate`', '(`lastdate`)']
-                    f_creates.write("CREATE INDEX %s ON %s%s;\n" % (ind[1], table, ind[2]))
+                    ind_name = clean_name(ind[1])
+                    f_creates.write("CREATE INDEX %s_%s ON %s%s;\n" % (table, ind_name, table, ind[2]))
+                elif ind[0] == "UNIQUE":
+                    ind_name = clean_name(ind[2])
+                    sql = "CREATE UNIQUE INDEX IF NOT EXISTS %s_%s ON %s%s;\n" % (table, ind_name, table, ind[3])
+                    if options.delay_constraints:
+                        delayed_constarints.append(sql)
+                    else:
+                        f_creates.write(sql)
         else:
+            if l.startswith("/*"):
+                continue
             f_creates.write(l)
+
+if delayed_constarints:
+    fp = open("schema-post.sql", "w")
+    fp.write("".join(delayed_constarints))
