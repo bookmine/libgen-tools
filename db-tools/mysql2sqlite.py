@@ -8,7 +8,7 @@ import re
 oparser = optparse.OptionParser(usage="%prog <options> <mysql db dump>", description="""\
 Convert MySQL DB dump into SQLite DB dump
 """)
-oparser.add_option("", "--only-schema", action="store_true", help="Ignore INSERT data")
+oparser.add_option("", "--no-data", action="store_true", help="Ignore INSERT data")
 oparser.add_option("", "--delay-constraints", action="store_true", help="Delay adding constraints until after data INSERTed")
 
 (options, args) = oparser.parse_args()
@@ -45,7 +45,7 @@ def break_insert(l):
     statement = l[:i]
     m = re.match(r"INSERT INTO `?(.+?)`? VALUES", statement)
     table = m.group(1)
-    print table
+#    print table
     f = open_for_table(table)
     f.write("BEGIN;\n")
 
@@ -107,7 +107,7 @@ delayed_constarints = []
 
 for l in f:
     if l.startswith("INSERT"):
-        if not options.only_schema:
+        if not options.no_data:
             break_insert(l)
     else:
         if re.match(r"^CREATE DATABASE|^USE|^LOCK|^UNLOCK", l):

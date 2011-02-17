@@ -1,18 +1,24 @@
 DB=libgen.sqlite3
+TIME=time
 
 .%.sql: %.sql
-	time sqlite3 $(DB) <$^
+	$(TIME) sqlite3 $(DB) <$^
 	touch $@
 
-all: $(DB) .service.sql .description.sql .updated.sql
+all: $(DB) .service.sql .description.sql .updated.sql .constraints
+
+schema.sql: backup_ba.sql
+	$(TIME) python mysql2sqlite.py --delay $^
 
 $(DB): schema.sql
 	rm -f $(DB) .*.sql
 	sqlite3 $@ <$^
 
-index:
-	echo "CREATE UNIQUE INDEX update_md5 ON updated(md5);" | sqlite3 $(DB)
-	echo "CREATE UNIQUE INDEX description_md5 ON description(md5);" | sqlite3 $(DB)
+.constraints: schema-post.sql
+	$(TIME) sqlite3 $(DB) <$^
 
 libgen.csv: $(DB)
 	echo "SELECT Filename, Filesize, MD5 FROM updated WHERE Filename != '';" | sqlite3 -csv $(DB) >$@
+
+clean:
+	rm -f service.sql description.sql updated.sql schema.sql schema-post.sql
